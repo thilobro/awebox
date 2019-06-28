@@ -1180,7 +1180,7 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
     terminal_conditions_list = []
     prefixes = ['', 'd', 'dd']
 
-    for deriv in range(2): #todo: should actually be range 3 to include boundary conditions for acceleration. Produces weird results though
+    for deriv in range(3): #todo: should actually be range 3 to include boundary conditions for acceleration. Produces weird results though
         initial_LHS = 0.
         initial_RHS = V['b_vec',prefixes[deriv] + 'p_hat_0']
         terminal_LHS = 0.
@@ -1212,16 +1212,14 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
                            jerk_conditions
                            )
 
-    # generate symbolic A_mat
-    A_mat = ct.jacobian(equations, V['c_vec'])
-
-    # generate function for A_mat
-    A_mat_fun = ct.Function('A_mat_fun', [V], [A_mat])
-
     # generate numerical V
     V_num = V(0.0)
     for key in struct_op.subkeys(V, 'b_vec'):
         V_num['b_vec', key] = boundary_conditions[key]
+    V_num['b_vec', 'dp_hat_0'] = 0.
+    V_num['b_vec', 'ddp_hat_0'] = 0.
+    V_num['b_vec', 'dp_hat_f'] = 0.
+    V_num['b_vec', 'ddp_hat_f'] = 0.
     for i in range(len(struct_op.subkeys(V, 't_vec'))):
         V_num['t_vec','t_' + str(i)] = tgrid_s_curve[i]
 
@@ -1240,8 +1238,9 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
     ## build cost function
     cost_function = 0.
     for segment in range(1,8):
-        for degree in range(1, 4):
-            cost_function += (V['c_vec','poly_coeff_' + str(segment), degree])**2
+        cost_function += (V['c_vec','poly_coeff_' + str(segment), -1])**2
+        # for degree in range(1, 4):
+            # cost_function += (V['c_vec','poly_coeff_' + str(segment), degree])**2
 
     ## build nlp
     jerk_nlp = {'x': V, 'f': cost_function, 'g': constraints}
