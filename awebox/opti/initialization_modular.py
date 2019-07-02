@@ -248,11 +248,11 @@ def __set_primitives(options, model):
 
         # build initial configuration
         initial_configuration = {}
-        initial_configuration['angular_looping_velocity'] = np.pi
+        initial_configuration['angular_looping_velocity'] = 0.
         initial_configuration['l_t'] = 700.
         initial_configuration['inclination'] = 20. * np.pi / 180.
         initial_configuration['cone_angle'] = 60. * np.pi / 180.
-        initial_configuration['upstream_node_velocity'] = 30.
+        initial_configuration['upstream_node_velocity'] = 0.
 
         # build primitive
         launch_args['type'] = 'goto'
@@ -294,7 +294,7 @@ def __estimate_t_f(primitives, options):
         t_f = 2 * np.pi * number_of_loopings / angular_looping_velocity
 
     else:
-        t_f = 50.
+        t_f = 30.
 
     return t_f
 
@@ -419,7 +419,7 @@ def __generate_interpolation_parameters(time_grid_parameters, model, initializat
 
     # generate polynomial coefficients for s curves
     polynomial_coeff = {}
-    polynomial_coeff['l_t'] = __parameterize_curve(boundary_conditions['l_t'], time_grid_parameters, interpolation_scheme)
+    polynomial_coeff['l_t'] = __parameterize_curve(boundary_conditions['l_t'], time_grid_parameters, interpolation_scheme, 'l_t')
 
     for node in range(1, number_of_nodes):
         parameter_list = []
@@ -432,7 +432,7 @@ def __generate_interpolation_parameters(time_grid_parameters, model, initializat
         else:
             parameter_list += ['inclination', 'azimuth']
         for parameter in parameter_list:
-            polynomial_coeff[parameter + node_str] = __parameterize_curve(boundary_conditions[parameter + node_str], time_grid_parameters, interpolation_scheme)
+            polynomial_coeff[parameter + node_str] = __parameterize_curve(boundary_conditions[parameter + node_str], time_grid_parameters, interpolation_scheme, parameter + node_str)
 
     # create configuration dict
     configurations = {}
@@ -968,7 +968,7 @@ def __list_DM_to_array(list_DM):
 
     return array
 
-def __parameterize_curve(boundary_conditions, time_grid_parameters, interpolation_scheme):
+def __parameterize_curve(boundary_conditions, time_grid_parameters, interpolation_scheme, variable_name):
     """
     Solves linear system of equations to generate parameters (polynomial coefficients) of 7 segment s-curve s.t.
         boundary conditions are met
@@ -979,7 +979,7 @@ def __parameterize_curve(boundary_conditions, time_grid_parameters, interpolatio
 
     if interpolation_scheme == 's_curve':
         tgrid_s_curve = time_grid_parameters['tgrid_s_curve']
-        c_vec = __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions)
+        c_vec = __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name)
 
     else:
         raise ValueError('Error: Interpolation scheme not supported.')
@@ -1061,6 +1061,7 @@ def __generate_vals(V_init, primitive, nlp, model, time_grid_parameters, interpo
         d_current = time_grid_parameters['d_current']
         tgrid_coll = time_grid_parameters['tgrid_coll']
 
+    plot_params = {}
     #set xi initial guess
     if options['type'] in ['nominal_landing', 'compromised_landing']:
         V_init['xi','xi_0'] = interpolation_parameters['configurations']['conf_0']['parameterization_dict']['xi_initial']
@@ -1083,11 +1084,19 @@ def __generate_vals(V_init, primitive, nlp, model, time_grid_parameters, interpo
             for j in range(d_vals):
                 t_coll = tgrid_coll[k, j]
                 continuous_guess, interpolation_variables = __get_continuous_guess(t_coll, time_grid_parameters, interpolation_parameters, primitive, model, interpolation_scheme)
+                for key in interpolation_variables.keys():
+                    if key not in plot_params.keys():
+                        plot_params[key] = []
+                    plot_params[key] += [interpolation_variables[key]]
                 for name in struct_op.subkeys(model.variables, 'xd'):
                     V_init['coll_var', k, j, 'xd', name] = continuous_guess[name]
                 if model.options['tether']['control_var'] == 'ddl_t':
                     if 'u' in V_init.keys():
                         V_init['coll_var', k, j, 'u', 'ddl_t'] = continuous_guess['ddl_t']
+    # import matplotlib.pyplot as plt
+    # plt.plot(plot_params['Omega21'])
+    # plt.plot(plot_params['dOmega21'])
+    # plt.show()
     return V_init
 
 def __get_continuous_guess(t_cont, time_grid_parameters, interpolation_parameters, primitive, model, interpolation_scheme):
@@ -1106,7 +1115,7 @@ def __get_continuous_guess(t_cont, time_grid_parameters, interpolation_parameter
 
     return continuous_guess, interpolation_variables
 
-def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
+def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name):
     """
     Assembles the linear system of equations A*x = b that is used to find the polynomial coefficients that parameterize
         the s-curve
@@ -1115,6 +1124,10 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
     :return: matrix A and vector b for the linear system of equations
     """
 
+    is_omega = False
+    # if len(variable_name) >= len('Omega'):
+    #     if variable_name[:len('Omega')] == 'Omega':
+    #         is_omega = True
     # generate constants
     constants = [1., 1., 1./2., 1./6., 1./24.]
 
@@ -1194,14 +1207,27 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
     initial_conditions = ct.vertcat(*initial_conditions_list)
     terminal_conditions = ct.vertcat(*terminal_conditions_list)
 
+    ## linear omega
+    lin_omega_conditions_list = []
+    if is_omega:
+        # for segment in range(2,6):
+        for segment in [2]:
+            RHS = 0
+            # LHS1 = V['c_vec','poly_coeff_' + str(segment), -1]
+            # LHS2 = V['c_vec','poly_coeff_' + str(segment), -2]
+            # lin_omega_conditions_list += [RHS - LHS1, RHS - LHS2]
+            # lin_omega_conditions_list += [RHS - LHS1]
+    lin_omega_conditions = ct.vertcat(*lin_omega_conditions_list)
+
     ## jerk conditions
     jerk_conditions_list = []
 
-    for segment in [2, 4, 6]:
-        RHS = 0.
-        LHS = V['c_vec','poly_coeff_' + str(segment), -1]
-        jerk_condition = LHS - RHS
-        jerk_conditions_list += [jerk_condition]
+    if not is_omega:
+        for segment in [2, 4, 6]:
+            RHS = 0.
+            LHS = V['c_vec','poly_coeff_' + str(segment), -1]
+            jerk_condition = LHS - RHS
+            jerk_conditions_list += [jerk_condition]
     jerk_conditions = ct.vertcat(*jerk_conditions_list)
 
     ## concat equations
@@ -1209,17 +1235,25 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
                            continuity_equations,
                            initial_conditions,
                            terminal_conditions,
-                           jerk_conditions
+                           jerk_conditions,
+                           lin_omega_conditions
                            )
 
     # generate numerical V
     V_num = V(0.0)
     for key in struct_op.subkeys(V, 'b_vec'):
         V_num['b_vec', key] = boundary_conditions[key]
-    V_num['b_vec', 'dp_hat_0'] = 0.
-    V_num['b_vec', 'ddp_hat_0'] = 0.
-    V_num['b_vec', 'dp_hat_f'] = 0.
-    V_num['b_vec', 'ddp_hat_f'] = 0.
+    if not is_omega:
+        V_num['b_vec', 'dp_hat_0'] = 0.
+        V_num['b_vec', 'ddp_hat_0'] = 0.
+        V_num['b_vec', 'dp_hat_f'] = 0.
+        V_num['b_vec', 'ddp_hat_f'] = 0.
+    else:
+        # V_num['b_vec', 'dp_hat_0'] = boundary_conditions['dp_hat_f']
+        V_num['b_vec', 'dp_hat_0'] = 0.
+        V_num['b_vec', 'ddp_hat_0'] = 0.
+        # V_num['b_vec', 'dp_hat_f'] = 0.
+        # V_num['b_vec', 'ddp_hat_f'] = 0.
     for i in range(len(struct_op.subkeys(V, 't_vec'))):
         V_num['t_vec','t_' + str(i)] = tgrid_s_curve[i]
 
@@ -1227,8 +1261,16 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions):
 
     ## build constraints
     eq_constraints_list = []
-    for vec in ['t_vec', 'b_vec']:
+    # for vec in ['t_vec', 'b_vec']:
+    for vec in ['t_vec']:
         for key in struct_op.subkeys(V, vec):
+            eq_constraints_list += [V[vec, key] - V_num[vec, key]]
+    for vec in ['b_vec']:
+        if not is_omega:
+            constr_keys = struct_op.subkeys(V,vec)
+        else:
+            constr_keys = ['p_hat_f', 'dp_hat_f', 'dp_hat_0']
+        for key in constr_keys:
             eq_constraints_list += [V[vec, key] - V_num[vec, key]]
     eq_constraints = ct.vertcat(*eq_constraints_list)
     constraints = ct.vertcat(equations,

@@ -169,7 +169,8 @@ class Formulation(object):
                 xi_bounds['xi_0'] = [xi_0, xi_0]
             V_pickle_initial, plot_dict_pickle_initial = self.__get_V_pickle(options, 'initial')
 
-        if param_terminal_conditions:
+        # if param_terminal_conditions:
+        if options['trajectory']['type'] == 'launch':
             xi_bounds['xi_f'] = [0.0, 1.0]
             V_pickle_terminal, plot_dict_pickle_terminal = self.__get_V_pickle(options, 'terminal')
 
@@ -338,7 +339,7 @@ class Formulation(object):
     @integral_constants.setter
     def integral_constants(self):
         logging.warning('Cannot set integral_constants object.')
-        
+
     @property
     def fix_tether_length(self):
         return self.__fix_tether_length
