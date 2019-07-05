@@ -115,6 +115,11 @@ def angle_between(a, b):
 
     return theta
 
+def signed_angle_between(a, b, n):
+    theta = np.arctan2(dot(cross(a, b), n), dot(a, b))
+
+    return theta
+
 def xhat():
     return xhat_np()
 

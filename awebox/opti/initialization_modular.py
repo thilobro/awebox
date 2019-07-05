@@ -248,16 +248,17 @@ def __set_primitives(options, model):
 
         # build initial configuration
         initial_configuration = {}
+        # initial_configuration['angular_looping_velocity'] = -0.10 * 2 * np.pi
         initial_configuration['angular_looping_velocity'] = 0.
-        initial_configuration['l_t'] = 700.
-        initial_configuration['inclination'] = 20. * np.pi / 180.
-        initial_configuration['cone_angle'] = 60. * np.pi / 180.
+        initial_configuration['l_t'] = 220.
+        initial_configuration['inclination'] = 19.44 * np.pi / 180.
+        initial_configuration['cone_angle'] = 20. * np.pi / 180.
         initial_configuration['upstream_node_velocity'] = 0.
 
         # build primitive
         launch_args['type'] = 'goto'
         launch_args['normed_times'] = (0,1)
-        launch_args['number_of_loopings'] = 0.
+        launch_args['number_of_loopings'] = 1.
         launch_args['initial_configuration'] = {}
         launch_args['initial_configuration']['type'] = 'simple_pos'
         launch_args['initial_configuration']['configuration'] = initial_configuration
@@ -294,7 +295,7 @@ def __estimate_t_f(primitives, options):
         t_f = 2 * np.pi * number_of_loopings / angular_looping_velocity
 
     else:
-        t_f = 30.
+        t_f = 15.
 
     return t_f
 
@@ -805,7 +806,7 @@ def __get_configuration_from_param(formulation, description, model, initializati
             dPhi = ct.mtimes(ct.jacobian(Phi, sconf['var']), sconf['dvar'])
             ddPhi = ct.mtimes(ct.jacobian(dPhi, ct.vertcat(sconf['var'], sconf['dvar'])), ct.vertcat(sconf['dvar'], sconf['ddvar']))
             interpol_fun['Phi' + node_str] = ct.Function('Phi' + node_str, [sconf], [Phi, dPhi, ddPhi])
-            Omega = vect_op.angle_between(e_hat_Omega, e_hat_y)
+            Omega = vect_op.signed_angle_between(e_hat_Omega, e_hat_y, e_hat_x)
             dOmega = ct.mtimes(ct.jacobian(Omega, sconf['var']), sconf['dvar'])
             ddOmega = ct.mtimes(ct.jacobian(dOmega, ct.vertcat(sconf['var'],sconf['dvar'])), ct.vertcat(sconf['dvar'],sconf['ddvar']))
             interpol_fun['Omega' + node_str] = ct.Function('Omega' + node_str, [sconf], [Omega, dOmega, ddOmega])
@@ -911,7 +912,7 @@ def __get_parameterization_dict(formulation, initial_or_terminal, initialization
 
     # get best exit/entry point
     if not fixed_xi:
-        param_constraint_index = 15#__get_best_transition_point(plot_dict, model)
+        param_constraint_index = 20#__get_best_transition_point(plot_dict, model)
         time_grid_ip = plot_dict['time_grids']['ip']
         xi_param = time_grid_ip[param_constraint_index] / time_grid_ip[-1]
     elif fixed_xi:
@@ -1125,9 +1126,9 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     """
 
     is_omega = False
-    # if len(variable_name) >= len('Omega'):
-    #     if variable_name[:len('Omega')] == 'Omega':
-    #         is_omega = True
+    if len(variable_name) >= len('Omega'):
+        if variable_name[:len('Omega')] == 'Omega':
+            is_omega = True
     # generate constants
     constants = [1., 1., 1./2., 1./6., 1./24.]
 
@@ -1217,12 +1218,14 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
             # LHS2 = V['c_vec','poly_coeff_' + str(segment), -2]
             # lin_omega_conditions_list += [RHS - LHS1, RHS - LHS2]
             # lin_omega_conditions_list += [RHS - LHS1]
+        lin_omega_conditions_list += [-V['c_vec','poly_coeff_' + str(1), -1] * V['c_vec','poly_coeff_' + str(1), -3]]
     lin_omega_conditions = ct.vertcat(*lin_omega_conditions_list)
 
     ## jerk conditions
     jerk_conditions_list = []
 
-    if not is_omega:
+    # if not is_omega:
+    if True:
         for segment in [2, 4, 6]:
             RHS = 0.
             LHS = V['c_vec','poly_coeff_' + str(segment), -1]
@@ -1243,17 +1246,6 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     V_num = V(0.0)
     for key in struct_op.subkeys(V, 'b_vec'):
         V_num['b_vec', key] = boundary_conditions[key]
-    if not is_omega:
-        V_num['b_vec', 'dp_hat_0'] = 0.
-        V_num['b_vec', 'ddp_hat_0'] = 0.
-        V_num['b_vec', 'dp_hat_f'] = 0.
-        V_num['b_vec', 'ddp_hat_f'] = 0.
-    else:
-        # V_num['b_vec', 'dp_hat_0'] = boundary_conditions['dp_hat_f']
-        V_num['b_vec', 'dp_hat_0'] = 0.
-        V_num['b_vec', 'ddp_hat_0'] = 0.
-        # V_num['b_vec', 'dp_hat_f'] = 0.
-        # V_num['b_vec', 'ddp_hat_f'] = 0.
     for i in range(len(struct_op.subkeys(V, 't_vec'))):
         V_num['t_vec','t_' + str(i)] = tgrid_s_curve[i]
 
@@ -1262,27 +1254,20 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     ## build constraints
     eq_constraints_list = []
     # for vec in ['t_vec', 'b_vec']:
-    for vec in ['t_vec']:
+    for vec in ['t_vec','b_vec']:
         for key in struct_op.subkeys(V, vec):
             eq_constraints_list += [V[vec, key] - V_num[vec, key]]
-    for vec in ['b_vec']:
-        if not is_omega:
-            constr_keys = struct_op.subkeys(V,vec)
-        else:
-            constr_keys = ['p_hat_f', 'dp_hat_f', 'dp_hat_0']
-        for key in constr_keys:
-            eq_constraints_list += [V[vec, key] - V_num[vec, key]]
     eq_constraints = ct.vertcat(*eq_constraints_list)
-    constraints = ct.vertcat(equations,
-                             eq_constraints
+    constraints = ct.vertcat(eq_constraints,
+                             equations
                              )
+    lbg = ct.DM.zeros(constraints.shape)
+    lbg[-1] = -ct.inf
 
     ## build cost function
     cost_function = 0.
     for segment in range(1,8):
         cost_function += (V['c_vec','poly_coeff_' + str(segment), -1])**2
-        # for degree in range(1, 4):
-            # cost_function += (V['c_vec','poly_coeff_' + str(segment), degree])**2
 
     ## build nlp
     jerk_nlp = {'x': V, 'f': cost_function, 'g': constraints}
@@ -1298,11 +1283,13 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     jerk_solver = cas.nlpsol('jerk_solver', 'ipopt', jerk_nlp, jerk_options)
 
     ## compute solution
-    jerk_solution = jerk_solver(x0=V_num, lbg=0., ubg=0.)
+    jerk_solution = jerk_solver(x0=V_num, lbg=lbg, ubg=0.)
     jerk_solution = V(jerk_solution['x'])
 
     # create outputs
     c_vec = jerk_solution['c_vec']
+    if variable_name in ['Omega21']:
+        print(V_num['b_vec'])
 
     return c_vec
 

@@ -78,7 +78,7 @@ def define_homotopy_schedule(formulation):
     if traj_type == 'nominal_landing':
         homotopy_schedule = homotopy_schedule + nominal_landing_schedule
 
-    if traj_type == 'transition':
+    if traj_type in ['transition','launch']:
         homotopy_schedule = homotopy_schedule + transition_schedule
 
     if traj_type == 'compromised_landing':
@@ -207,13 +207,15 @@ def define_bounds_to_update(model, bounds_schedule, formulation):
 
     transition_updates = {}
     # check which tether length variable is a control variable
-    if 'ddl_t' in list(model.variables_dict['u'].keys()):
-        transition_updates[0] = ['ddl_t', 'ddl_t', 'upsilon'] + struct_op.subkeys(model.variables, 'theta') * 2
-    elif 'dddl_t' in list(model.variables_dict['u'].keys()):
-        transition_updates[0] = ['dddl_t', 'dddl_t', 'upsilon'] + struct_op.subkeys(model.variables, 'theta') * 2
-    # check if phase fix
-    if 'dl_t' in list(bounds_schedule.keys()):
-        transition_updates[0] += ['dl_t']*2
+    # if 'ddl_t' in list(model.variables_dict['u'].keys()):
+    #     transition_updates[0] = ['ddl_t', 'ddl_t', 'upsilon'] + struct_op.subkeys(model.variables, 'theta') * 2
+    # elif 'dddl_t' in list(model.variables_dict['u'].keys()):
+    #     transition_updates[0] = ['dddl_t', 'dddl_t', 'upsilon'] + struct_op.subkeys(model.variables, 'theta') * 2
+    # # check if phase fix
+    # if 'dl_t' in list(bounds_schedule.keys()):
+    #     transition_updates[0] += ['dl_t']*2
+    transition_updates[0] = ['t_f']*2
+    # transition_updates[0] = []
 
     transition_updates[1] = ['upsilon']
 
@@ -474,4 +476,3 @@ def initialize_bound_update_counter(model, schedule, formulation):
         bound_update_counter['l_t'] = 0
 
     return bound_update_counter
-

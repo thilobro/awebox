@@ -98,8 +98,7 @@ def determine_if_initial_conditions(options):
     return enforce_initial_conditions
 
 def determine_if_param_terminal_conditions(options):
-    # if options['trajectory']['type'] in ['transition', 'launch']:
-    if options['trajectory']['type'] in ['transition']:
+    if options['trajectory']['type'] in ['transition', 'launch']:
          return True
 
     return False
