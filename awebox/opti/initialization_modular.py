@@ -1174,7 +1174,7 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     # generate equations
 
     ## continuity equations
-    continuity_equations_list = []
+    continuity_eq_list = []
 
     for segment in range(1,7):
         for deriv in range(3):
@@ -1184,16 +1184,16 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
                 if deriv + degree < 4:
                     LHS += V['c_vec','poly_coeff_' + str(segment), degree + deriv] * V['t_vec','t_' + str(segment)]**degree * constants[degree]
                     RHS += V['c_vec','poly_coeff_' + str(segment + 1), degree + deriv] * V['t_vec','t_' + str(segment)]**degree * constants[degree]
-            continuity_equations_list += [LHS - RHS]
+            continuity_eq_list += [LHS - RHS]
 
-    continuity_equations = ct.vertcat(*continuity_equations_list)
+    continuity_eq = ct.vertcat(*continuity_eq_list)
 
     ## boundary_conditions
-    initial_conditions_list = []
-    terminal_conditions_list = []
+    initial_eq_list = []
+    terminal_eq_list = []
     prefixes = ['', 'd', 'dd']
 
-    for deriv in range(3): #todo: should actually be range 3 to include boundary conditions for acceleration. Produces weird results though
+    for deriv in range(3):
         initial_LHS = 0.
         initial_RHS = V['b_vec',prefixes[deriv] + 'p_hat_0']
         terminal_LHS = 0.
@@ -1202,28 +1202,19 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
             if deriv + degree < 4:
                 initial_LHS += V['c_vec','poly_coeff_1', degree + deriv] * V['t_vec','t_0']**degree * constants[degree]
                 terminal_LHS += V['c_vec','poly_coeff_7', degree + deriv] * V['t_vec','t_7']**degree * constants[degree]
-        initial_conditions_list += [initial_LHS - initial_RHS]
-        terminal_conditions_list += [terminal_LHS - terminal_RHS]
-    initial_conditions = ct.vertcat(*initial_conditions_list)
-    terminal_conditions = ct.vertcat(*terminal_conditions_list)
+        initial_eq_list += [initial_LHS - initial_RHS]
+        terminal_eq_list += [terminal_LHS - terminal_RHS]
+    initial_eq = ct.vertcat(*initial_eq_list)
+    terminal_eq = ct.vertcat(*terminal_eq_list)
 
     ## jerk conditions
-    jerk_conditions_list = []
+    jerk_eq_list = []
 
     for segment in [2, 4, 6]:
         RHS = 0.
         LHS = V['c_vec','poly_coeff_' + str(segment), -1]
-        jerk_condition = LHS - RHS
-        jerk_conditions_list += [jerk_condition]
-    jerk_conditions = ct.vertcat(*jerk_conditions_list)
-
-    ## concat equations
-    equations = ct.vertcat(
-                           continuity_equations,
-                           initial_conditions,
-                           terminal_conditions,
-                           jerk_conditions
-                           )
+        jerk_eq_list += [LHS - RHS]
+    jerk_eq = ct.vertcat(*jerk_eq_list)
 
     # generate numerical V
     V_num = V(0.0)
@@ -1235,16 +1226,35 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     # create NLP minimizing the jerk
 
     ## build constraints
-    eq_constraints_list = []
+    param_eq_list = []
     for vec in ['t_vec','b_vec']:
         for key in struct_op.subkeys(V, vec):
-            eq_constraints_list += [V[vec, key] - V_num[vec, key]]
-    eq_constraints = ct.vertcat(*eq_constraints_list)
-    constraints = ct.vertcat(eq_constraints,
-                             equations
+            param_eq_list += [V[vec, key] - V_num[vec, key]]
+    param_eq = ct.vertcat(*param_eq_list)
+
+    ## concat constraints
+    eq_cstr = ct.vertcat(
+            continuity_eq,
+            initial_eq,
+            terminal_eq,
+            jerk_eq,
+            param_eq
+            )
+
+    ineq_cstr = ct.vertcat([])
+
+    constraints = ct.vertcat(eq_cstr,
+                             ineq_cstr
                              )
-    lbg = ct.DM.zeros(constraints.shape)
-    lbg[-1] = -ct.inf
+
+    lb_eq = ct.DM.zeros(ineq_cstr.shape[0])
+    lb_ineq = - ct.inf * ct.DM.ones(ineq_cstr.shape[0])
+    lbg = ct.vertcat(
+            lb_eq,
+            lb_ineq
+            )
+
+    ubg = 0
 
     ## build cost function
     cost_function = 0.
@@ -1265,7 +1275,7 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     jerk_solver = cas.nlpsol('jerk_solver', 'ipopt', jerk_nlp, jerk_options)
 
     ## compute solution
-    jerk_solution = jerk_solver(x0=V_num, lbg=lbg, ubg=0.)
+    jerk_solution = jerk_solver(x0=V_num, lbg=lbg, ubg=ubg)
     jerk_solution = V(jerk_solution['x'])
 
     # create outputs
