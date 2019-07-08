@@ -1210,13 +1210,11 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     ## jerk conditions
     jerk_conditions_list = []
 
-    # if not is_omega:
-    if True:
-        for segment in [2, 4, 6]:
-            RHS = 0.
-            LHS = V['c_vec','poly_coeff_' + str(segment), -1]
-            jerk_condition = LHS - RHS
-            jerk_conditions_list += [jerk_condition]
+    for segment in [2, 4, 6]:
+        RHS = 0.
+        LHS = V['c_vec','poly_coeff_' + str(segment), -1]
+        jerk_condition = LHS - RHS
+        jerk_conditions_list += [jerk_condition]
     jerk_conditions = ct.vertcat(*jerk_conditions_list)
 
     ## concat equations
