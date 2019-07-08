@@ -248,7 +248,6 @@ def __set_primitives(options, model):
 
         # build initial configuration
         initial_configuration = {}
-        # initial_configuration['angular_looping_velocity'] = -0.10 * 2 * np.pi
         initial_configuration['angular_looping_velocity'] = 0.
         initial_configuration['l_t'] = 220.
         initial_configuration['inclination'] = 19.44 * np.pi / 180.
@@ -1208,19 +1207,6 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
     initial_conditions = ct.vertcat(*initial_conditions_list)
     terminal_conditions = ct.vertcat(*terminal_conditions_list)
 
-    ## linear omega
-    lin_omega_conditions_list = []
-    if is_omega:
-        # for segment in range(2,6):
-        for segment in [2]:
-            RHS = 0
-            # LHS1 = V['c_vec','poly_coeff_' + str(segment), -1]
-            # LHS2 = V['c_vec','poly_coeff_' + str(segment), -2]
-            # lin_omega_conditions_list += [RHS - LHS1, RHS - LHS2]
-            # lin_omega_conditions_list += [RHS - LHS1]
-        lin_omega_conditions_list += [-V['c_vec','poly_coeff_' + str(1), -1] * V['c_vec','poly_coeff_' + str(1), -3]]
-    lin_omega_conditions = ct.vertcat(*lin_omega_conditions_list)
-
     ## jerk conditions
     jerk_conditions_list = []
 
@@ -1238,8 +1224,7 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
                            continuity_equations,
                            initial_conditions,
                            terminal_conditions,
-                           jerk_conditions,
-                           lin_omega_conditions
+                           jerk_conditions
                            )
 
     # generate numerical V
