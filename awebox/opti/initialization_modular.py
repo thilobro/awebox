@@ -1236,7 +1236,6 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
 
     ## build constraints
     eq_constraints_list = []
-    # for vec in ['t_vec', 'b_vec']:
     for vec in ['t_vec','b_vec']:
         for key in struct_op.subkeys(V, vec):
             eq_constraints_list += [V[vec, key] - V_num[vec, key]]
@@ -1271,8 +1270,6 @@ def __assemble_lse_for_s_curve(tgrid_s_curve, boundary_conditions, variable_name
 
     # create outputs
     c_vec = jerk_solution['c_vec']
-    if variable_name in ['Omega21']:
-        print(V_num['b_vec'])
 
     return c_vec
 
